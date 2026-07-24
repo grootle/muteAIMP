@@ -19,7 +19,7 @@ AIMP Auto Pause/Resume is a Python utility that automatically controls the playb
 1. **Clone the Repository:**
 
    ```bash
-   git clone https://github.com/yourusername/muteAIMP.git
+   git clone https://github.com/grootle/muteAIMP.git
    cd muteAIMP
    ```
 
