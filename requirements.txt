@@ -1,6 +1,0 @@
-comtypes==1.4.10
-psutil==7.0.0
-pyaimp==0.2.3
-pycaw==20240210
-pypiwin32==223
-pywin32==310

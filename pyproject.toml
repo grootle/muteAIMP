@@ -1,0 +1,30 @@
+[project]
+name = "muteaimp"
+version = "0.1.0"
+description = "Script to stop AIMP when other video or audio is playing"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Groot" }
+]
+requires-python = ">=3.9"
+dependencies = [
+    "pyaimp>=0.2,<1",
+    "pycaw>=20260921",
+]
+
+[project.urls]
+Homepage = "https://github.com/grootle/muteAIMP"
+Repository = "https://github.com/grootle/muteAIMP"
+Issues = "https://github.com/grootle/muteAIMP/issues"
+
+[project.scripts]
+muteaimp = "muteaimp.main:main"
+
+[build-system]
+requires = ["uv_build>=0.12.9,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = ""
