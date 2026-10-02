@@ -211,8 +211,9 @@ async def monitor_loop():
                 set_state(
                     status=(
                         'Paused because '
-                        + ', '.join(external_sources[:3])
-                        + (' is active' if len(external_sources) == 1 else ' are active')
+                        + ('an external source is active'
+                           if len(external_sources) == 1
+                           else 'external sources are active')
                     )
                 )
             except Exception:
