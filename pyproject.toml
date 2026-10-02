@@ -14,8 +14,6 @@ dependencies = [
     "pyaimp>=0.2,<1",
     "pycaw>=20260921",
     "pyside6>=6.10.3",
-    "winrt-windows-applicationmodel>=3.2.1",
-    "winrt-windows-media-control>=3.2.1",
 ]
 
 [project.urls]

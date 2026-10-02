@@ -16,7 +16,7 @@ DEFAULT_RESUME_DELAY_MS = 1000
 @dataclass
 class Settings:
     enabled: bool = True
-    trigger_mode: str = 'audio_or_media'  # audio / media / audio_or_media
+    trigger_mode: str = 'media'  # audio / media
     sound_threshold_dbfs: int = DEFAULT_SOUND_THRESHOLD_DBFS
     check_interval_ms: int = DEFAULT_INTERVAL_MS
     resume_after_external: bool = True
@@ -73,8 +73,7 @@ state = {
     'aimp_volume': None,
     'external_sources': [],
     'status': 'Starting...',
-    'audio_trigger': False,
-    'media_trigger': False,
+    'external_trigger': False,
     'media_available': False,
     'media_error': ''
 }
@@ -92,8 +91,7 @@ def get_state():
             'aimp_volume': state['aimp_volume'],
             'external_sources': list(state['external_sources']),
             'status': state['status'],
-            'audio_trigger': state['audio_trigger'],
-            'media_trigger': state['media_trigger'],
+            'external_trigger': state['external_trigger'],
             'media_available': state['media_available'],
             'media_error': state['media_error'],
         }

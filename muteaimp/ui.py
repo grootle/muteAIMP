@@ -349,14 +349,17 @@ class TrayFlyout(QWidget):
         el.addWidget(self.external_label)
         content.addWidget(external_card)
 
-        footer = QHBoxLayout()
+        status = QHBoxLayout()
         self.status_label = QLabel('Starting...')
         self.status_label.setObjectName('muted')
+        status.addWidget(self.status_label, 1)
+        content.addLayout(status)
+
+        footer = QHBoxLayout()
         self.settings_button = QPushButton('⚙  Settings')
         self.settings_button.clicked.connect(self.controller.show_settings)
         self.exit_button = QPushButton('Exit')
         self.exit_button.clicked.connect(self.controller.shutdown)
-        footer.addWidget(self.status_label, 1)
         footer.addWidget(self.settings_button)
         footer.addWidget(self.exit_button)
         content.addLayout(footer)
@@ -457,11 +460,10 @@ class SettingsDialog(QDialog):
         row.addWidget(QLabel('Trigger source'))
         self.trigger_combo = QComboBox()
         self.trigger_combo.addItem('Audio activity', 'audio')
-        self.trigger_combo.addItem('Media playback (even if silent)', 'media')
-        self.trigger_combo.addItem('Audio OR media playback', 'audio_or_media')
+        self.trigger_combo.addItem('Media activity (not depend on sound)', 'media')
         current = store.snapshot().trigger_mode
         idx = self.trigger_combo.findData(current)
-        self.trigger_combo.setCurrentIndex(idx if idx >= 0 else 2)
+        self.trigger_combo.setCurrentIndex(idx if idx >= 0 else 1)
         self.trigger_combo.currentIndexChanged.connect(
             lambda _: store.update(trigger_mode=self.trigger_combo.currentData())
         )
