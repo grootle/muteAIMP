@@ -1,7 +1,7 @@
 import json
 import os
 import threading
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
 APP_NAME = 'MuteAIMP'
@@ -29,39 +29,79 @@ class Settings:
 
 
 class SettingsStore:
+    """Thread-safe persistent settings storage"""
+
     def __init__(self, path: Path):
         self.path = path
         self.lock = threading.RLock()
         self.settings = self.load()
 
-    def load(self):
+        # Create the default configuration on first launch
+        if not self.path.exists():
+            self.save()
+
+    def load(self) -> Settings:
+        """Load settings while tolerating older configuration files"""
+
+        defaults = asdict(Settings())
+
+        if not self.path.is_file():
+            return Settings()
+
         try:
             data = json.loads(self.path.read_text(encoding='utf-8'))
-            base = asdict(Settings())
-            base.update(data)
-            return Settings(**base)
-        except Exception:
+            if not isinstance(data, dict):
+                raise ValueError('Configuration root must be a JSON object')  # noqa: TRY004
+
+            # Ignore keys that are no longer part of the Settings schema
+            valid_keys = {item.name for item in fields(Settings)}
+
+            merged = {
+                **defaults,
+                **{
+                    key: value
+                    for key, value in data.items()
+                    if key in valid_keys
+                }
+            }
+
+            return Settings(**merged)
+        except (OSError, ValueError, TypeError) as exc:
+            print(f'[SETTINGS] Could not load {self.path}: {exc}')
             return Settings()
 
     def save(self):
+        """Atomically write settings to disk"""
         with self.lock:
             self.path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = self.path.with_suffix('.tmp')
-            tmp.write_text(
-                json.dumps(asdict(self.settings), indent=2, ensure_ascii=False),
-                encoding='utf-8',
-            )
-            tmp.replace(self.path)
+            temporary_path = self.path.with_name(self.path.name + '.tmp')
+            serialized = json.dumps(asdict(self.settings), indent=2, ensure_ascii=False)
 
-    def snapshot(self):
+            # Flush the temporary file before replacing the old one
+            with temporary_path.open('w', encoding='utf-8', newline='\n') as tmp:
+                tmp.write(serialized)
+                tmp.flush()
+                os.fsync(tmp.fileno())
+
+            os.replace(temporary_path, self.path)
+
+    def snapshot(self) -> Settings:
+        """Return an independent copy of the current settings"""
         with self.lock:
             return Settings(**asdict(self.settings))
 
     def update(self, **kwargs):
+        """Update known settings and persist them immediately"""
+
+        valid_keys = {item.name for item in fields(Settings)}
+
         with self.lock:
             for key, value in kwargs.items():
-                if hasattr(self.settings, key):
-                    setattr(self.settings, key, value)
+                if key not in valid_keys:
+                    raise ValueError(f'Unknown setting: {key}')
+
+                setattr(self.settings, key, value)
+
             self.save()
 
 

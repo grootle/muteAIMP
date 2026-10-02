@@ -733,6 +733,7 @@ class ApplicationController:
         self.settings_dialog.activateWindow()
 
     def shutdown(self):
+        store.save()
         stop_event.set()
         self.flyout.hide()
         self.tray.hide()
