@@ -33,7 +33,8 @@ from PySide6.QtWidgets import (
 )
 
 from .core import monitor_thread_main
-from .utils import APP_NAME, get_state, stop_event, store
+from .logging_setup import APP_NAME, configure_logging
+from .utils import get_state, stop_event, store
 
 try:
     import winreg
@@ -41,6 +42,7 @@ except ImportError:  # pragma: no cover - the app targets Windows
     winreg = None
 
 SVG_PATH = Path(__file__).resolve().parent.parent / 'MuteAIMP.svg'
+logger = configure_logging()
 
 ORANGE = '#F57C00'
 ORANGE_HOVER = '#FF8A1F'
@@ -233,7 +235,9 @@ def load_svg_icon(svg_path):
 
     # Check whether the file exists
     if not svg_path.is_file():
-        raise FileNotFoundError(f'SVG file not found: {svg_path}')
+        msg = f'SVG file not found: {svg_path}'
+        logger.error(msg)
+        raise FileNotFoundError(msg)
 
     # Read SVG contents explicitly
     svg_data = QByteArray(svg_path.read_bytes())
@@ -241,10 +245,9 @@ def load_svg_icon(svg_path):
     renderer = QSvgRenderer(svg_data)
 
     if not renderer.isValid():
-        raise ValueError(
-            f'Qt could not parse SVG: {svg_path}\n'
-            'Try simplifying the SVG file'
-        )
+        msg = f'Qt could not parse SVG: {svg_path}. Try simplifying the SVG file.'
+        logger.error(msg)
+        raise ValueError(msg)
 
     icon = QIcon()
 
@@ -275,27 +278,22 @@ def load_svg_icon(svg_path):
     return icon
 
 
-# Windows startup integration
-def startup_command():
-    """Build a per-user startup command for source or frozen builds"""
-    executable = str(Path(sys.executable).resolve())
-
-    if getattr(sys, 'frozen', False):
-        return f'"{executable}"'
-
-    # The package is expected to be installed in the interpreter
-    # environment, so it can be launched from any working directory.
-    return f'"{executable}" -m muteaimp.main'
-
-
-def get_muteaimp_command():
+def resolve_muteaimp_launcher() -> Path:
     """Find the installed muteaimp entry-point executable"""
-    executable = shutil.which('muteaimp')
+    launcher = shutil.which('muteaimp')
 
-    if executable is None:
-        raise FileNotFoundError('The muteaimp command was not found in PATH')
+    if launcher:
+        return Path(launcher).resolve()
 
-    return subprocess.list2cmdline([executable])
+    # Fall back to the executable used to launch this process
+    current = Path(sys.argv[0])
+
+    if current.is_file():
+        return current.resolve()
+
+    msg = 'Could not locate the installed muteaimp launcher'
+    logger.error(msg)
+    raise FileNotFoundError(msg)
 
 
 def is_startup_enabled():
@@ -315,8 +313,8 @@ def is_startup_enabled():
 
     except FileNotFoundError:
         return False
-    except OSError as exc:
-        print(f'[STARTUP] Could not read startup setting: {exc}')
+    except OSError:
+        logger.exception('[STARTUP] Could not read startup setting')
         return False
 
 
@@ -327,7 +325,11 @@ def set_startup_enabled(enabled: bool):
         STARTUP_REGISTRY_PATH
     ) as key:
         if enabled:
-            command = get_muteaimp_command()
+            launcher = resolve_muteaimp_launcher()
+
+            # Quote the absolute path, including paths with spaces
+            command = subprocess.list2cmdline([str(launcher)])
+
             winreg.SetValueEx(
                 key,
                 STARTUP_VALUE_NAME,
@@ -1059,6 +1061,7 @@ class SettingsDialog(QDialog):
             self.startup_check.setChecked(is_startup_enabled())
             del blocker
 
+            logger.exception('Could not update Windows startup setting')
             QMessageBox.warning(
                 self,
                 APP_NAME,
@@ -1150,8 +1153,8 @@ class ApplicationController:
             # Load and set the application-wide icon before creating windows
             self.app_icon = load_svg_icon(SVG_PATH)
             self.app.setWindowIcon(self.app_icon)
-        except Exception as exc:
-            print(f'[UI] Could not load application SVG icon: {exc}')
+        except Exception:
+            logger.exception('[UI] Could not load application SVG icon')
             self.app_icon = QIcon()
             self.app.setWindowIcon(self.app_icon)
 

@@ -4,13 +4,15 @@ import threading
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
-APP_NAME = 'MuteAIMP'
-CONFIG_DIR = Path(os.getenv('LOCALAPPDATA', Path.home())) / APP_NAME
+from .logging_setup import CONFIG_DIR, configure_logging
+
 CONFIG_FILE = CONFIG_DIR / 'settings.json'
 
 DEFAULT_SOUND_THRESHOLD_DBFS = -60
 DEFAULT_INTERVAL_MS = 500
 DEFAULT_RESUME_DELAY_MS = 1000
+
+logger = configure_logging()
 
 
 @dataclass
@@ -51,7 +53,9 @@ class SettingsStore:
         try:
             data = json.loads(self.path.read_text(encoding='utf-8'))
             if not isinstance(data, dict):
-                raise ValueError('Configuration root must be a JSON object')  # noqa: TRY004
+                msg = 'Configuration root must be a JSON object'
+                logger.error(msg)
+                raise ValueError(msg)  # noqa: TRY004
 
             # Ignore keys that are no longer part of the Settings schema
             valid_keys = {item.name for item in fields(Settings)}
@@ -66,8 +70,8 @@ class SettingsStore:
             }
 
             return Settings(**merged)
-        except (OSError, ValueError, TypeError) as exc:
-            print(f'[SETTINGS] Could not load {self.path}: {exc}')
+        except (OSError, ValueError, TypeError):
+            logger.exception(f'[SETTINGS] Could not load {self.path}')
             return Settings()
 
     def save(self):
@@ -98,7 +102,9 @@ class SettingsStore:
         with self.lock:
             for key, value in kwargs.items():
                 if key not in valid_keys:
-                    raise ValueError(f'Unknown setting: {key}')
+                    msg = f'Unknown setting: {key}'
+                    logger.error(msg)
+                    raise ValueError(msg)
 
                 setattr(self.settings, key, value)
 

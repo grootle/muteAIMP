@@ -6,6 +6,7 @@ import comtypes
 from pyaimp import Client, PlayBackState
 from pycaw.pycaw import AudioUtilities, IAudioMeterInformation
 
+from .logging_setup import configure_logging
 from .utils import (
     Settings,
     set_state,
@@ -14,6 +15,7 @@ from .utils import (
 )
 
 AIMP_EXE = 'AIMP.exe'
+logger = configure_logging()
 
 
 def normalize_text(value: str) -> str:
@@ -116,7 +118,8 @@ def get_aimp_snapshot(client):
     playback = client.get_playback_state()
     playback_name = {
         PlayBackState.Playing: 'Playing',
-        PlayBackState.Paused: 'Paused'
+        PlayBackState.Paused: 'Paused',
+        PlayBackState.Stopped: 'Stopped'
     }.get(playback, 'Unknown')
 
     volume = None
@@ -141,6 +144,11 @@ async def monitor_loop():
     external_seen_count = 0
     external_clear_count = 0
 
+    last_external_trigger = None
+    last_external_sources = None
+    last_playback = None
+    last_volume_zero = None
+
     while not stop_event.is_set():
         settings = store.snapshot()
 
@@ -162,6 +170,23 @@ async def monitor_loop():
         confirmed_external = external_seen_count >= 2
         confirmed_clear = external_clear_count >= 2
 
+        # Log only stable changes in external activity.
+        # We do not log during the debounce period. The state is
+        # considered changed only after it has been confirmed.
+        if confirmed_external:
+            current_external_trigger = True
+            current_external_sources = set(external_sources)
+
+        elif confirmed_clear:
+            current_external_trigger = False
+            current_external_sources = set()
+
+        else:
+            # The state is still being debounced, so keep the
+            # previously logged state unchanged.
+            current_external_trigger = last_external_trigger
+            current_external_sources = last_external_sources
+
         # AIMP state
         try:
             client = Client()
@@ -177,7 +202,9 @@ async def monitor_loop():
             await asyncio.sleep(settings.check_interval_ms / 1000.0)
             continue
         except Exception as exc:
-            set_state(status=f'AIMP error: {type(exc).__name__}')
+            msg = f'AIMP error: {type(exc).__name__}'
+            logger.exception(msg)
+            set_state(status=msg)
             await asyncio.sleep(settings.check_interval_ms / 1000.0)
             continue
 
@@ -274,6 +301,55 @@ async def monitor_loop():
             else:
                 set_state(status='Monitoring is active')
 
+        # Logs
+        if last_external_trigger is not None:
+            if current_external_trigger != last_external_trigger:
+                if current_external_trigger:
+                    logger.info(
+                        'External activity started: %s',
+                        ', '.join(
+                            sorted(current_external_sources)
+                        ) or 'unknown',
+                    )
+                else:
+                    logger.info('External activity ended')
+            elif (
+                current_external_trigger
+                and current_external_sources != last_external_sources
+            ):
+                logger.info(
+                    'External activity changed: %s',
+                    ', '.join(
+                        sorted(current_external_sources)
+                    ) or 'unknown',
+                )
+
+        last_external_trigger = current_external_trigger
+
+        last_external_sources = (
+            set(current_external_sources)
+            if current_external_sources is not None
+            else set()
+        )
+
+        if volume_is_zero != last_volume_zero:
+            if last_volume_zero is not None:
+                if volume_is_zero:
+                    logger.info('AIMP volume became zero or muted')
+                elif settings.resume_when_aimp_volume_restored:
+                    logger.info('AIMP volume was restored')
+
+            last_volume_zero = volume_is_zero
+
+        if playback != last_playback:
+            if last_playback is not None:
+                logger.info(
+                    'AIMP playback state changed: %s',
+                    playback_name
+                )
+
+            last_playback = playback
+
         await asyncio.sleep(settings.check_interval_ms / 1000.0)
 
 
@@ -282,7 +358,7 @@ def monitor_thread_main():
     try:
         asyncio.run(monitor_loop())
     except Exception as exc:
-        print('Monitor thread fatal error:', exc)
+        logger.exception('Monitor thread fatal error')
         set_state(status=f'Monitor error: {type(exc).__name__}')
     finally:
         comtypes.CoUninitialize()
