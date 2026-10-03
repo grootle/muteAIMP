@@ -21,7 +21,7 @@ Homepage = "https://github.com/grootle/muteAIMP"
 Repository = "https://github.com/grootle/muteAIMP"
 Issues = "https://github.com/grootle/muteAIMP/issues"
 
-[project.scripts]
+[project.gui-scripts]
 muteaimp = "muteaimp.main:main"
 
 [build-system]

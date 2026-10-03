@@ -1,5 +1,8 @@
+import shutil
+import subprocess
 import sys
 import threading
+import winreg
 from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QRectF, QSignalBlocker, QSize, Qt, QTimer
@@ -21,6 +24,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSlider,
     QSystemTrayIcon,
     QTabWidget,
@@ -42,8 +46,8 @@ ORANGE = '#F57C00'
 ORANGE_HOVER = '#FF8A1F'
 ORANGE_DARK = '#D96500'
 
-STARTUP_REGISTRY_PATH = 'Software\\Microsoft\\Windows\\CurrentVersion\\Run'
-STARTUP_VALUE_NAME = 'muteAIMP'
+STARTUP_REGISTRY_PATH = r'Software\Microsoft\Windows\CurrentVersion\Run'
+STARTUP_VALUE_NAME = 'MuteAIMP'
 
 THEME = f"""
 QWidget {{
@@ -146,9 +150,8 @@ QSlider::handle:horizontal {{
     background: {ORANGE};
     width: 16px;
     margin: -5px 0;
-    border-radius: 8px;
+    border-radius: 5px;
 }}
-QSlider:disabled::handle:horizontal {{ background: #68727D; }}
 QCheckBox {{ spacing: 8px; }}
 QCheckBox:disabled {{ color: #68727D; }}
 QCheckBox::indicator {{ width: 18px; height: 18px; }}
@@ -285,6 +288,16 @@ def startup_command():
     return f'"{executable}" -m muteaimp.main'
 
 
+def get_muteaimp_command():
+    """Find the installed muteaimp entry-point executable"""
+    executable = shutil.which('muteaimp')
+
+    if executable is None:
+        raise FileNotFoundError('The muteaimp command was not found in PATH')
+
+    return subprocess.list2cmdline([executable])
+
+
 def is_startup_enabled():
     """Check whether MuteAIMP is registered to start at user logon"""
     if winreg is None:
@@ -307,24 +320,20 @@ def is_startup_enabled():
         return False
 
 
-def set_startup_enabled(enabled):
-    """Enable or disable muteAIMP in the current user's Run registry key"""
-    if winreg is None:
-        raise OSError('Windows startup registration is only supported on Windows')
-
-    with winreg.CreateKeyEx(
+def set_startup_enabled(enabled: bool):
+    """Enable or disable MuteAIMP at Windows user logon"""
+    with winreg.CreateKey(
         winreg.HKEY_CURRENT_USER,
-        STARTUP_REGISTRY_PATH,
-        0,
-        winreg.KEY_SET_VALUE,
+        STARTUP_REGISTRY_PATH
     ) as key:
         if enabled:
+            command = get_muteaimp_command()
             winreg.SetValueEx(
                 key,
                 STARTUP_VALUE_NAME,
                 0,
                 winreg.REG_SZ,
-                startup_command()
+                command
             )
         else:
             try:
@@ -434,7 +443,7 @@ class ToggleSwitch(QCheckBox):
 
 class TrayFlyout(QWidget):
     WIDTH = 390
-    HEIGHT = 300
+    HEIGHT = 320
 
     def __init__(self, app_controller):
         super().__init__(
@@ -487,32 +496,33 @@ class TrayFlyout(QWidget):
         # External sources card with a scrollable list
         external_card = QFrame()
         external_card.setObjectName('card')
+
+        # Keep the external sources card at a stable size
+        external_card.setFixedHeight(106)
+
         el = QVBoxLayout(external_card)
         el.setContentsMargins(14, 10, 14, 10)
         el.setSpacing(5)
 
+        # Anchor the heading to the top of the card
+        el.setAlignment(Qt.AlignmentFlag.AlignTop)
+
         sec2 = QLabel('ACTIVE EXTERNAL SOURCES')
         sec2.setObjectName('section')
+        sec2.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        sec2.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        sec2.setFixedHeight(16)
 
         self.external_list = QListWidget()
         self.external_list.setObjectName('externalList')
-        self.external_list.setSelectionMode(
-            QAbstractItemView.SelectionMode.NoSelection
-        )
-        self.external_list.setFocusPolicy(
-            Qt.FocusPolicy.NoFocus
-        )
-        self.external_list.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
-        )
-        self.external_list.setVerticalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAsNeeded
-        )
-        self.external_list.setMinimumHeight(25)
-        self.external_list.setMaximumHeight(76)
-        self.external_list.setUniformItemSizes(True)
 
-        el.addWidget(sec2)
+        # Keep the list viewport stable and scroll when necessary
+        self.external_list.setFixedHeight(62)
+        self.external_list.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.external_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.external_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
+        el.addWidget(sec2, 0, Qt.AlignmentFlag.AlignTop)
         el.addWidget(self.external_list)
         content.addWidget(external_card)
 
@@ -1137,6 +1147,7 @@ class ApplicationController:
         # Set the SVG icon application-wide so dialogs and the taskbar
         # use the same artwork as the system tray.
         try:
+            # Load and set the application-wide icon before creating windows
             self.app_icon = load_svg_icon(SVG_PATH)
             self.app.setWindowIcon(self.app_icon)
         except Exception as exc:
