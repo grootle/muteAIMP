@@ -28,28 +28,40 @@ def set_windows_app_user_model_id():
 
 def main():
     """Application entry point"""
-    args = sys.argv[1:]
 
-    if args and args[0].casefold() == 'log':
+    # The log viewer is intentionally allowed to run while
+    # the main MuteAIMP process is already running.
+    if (
+        len(sys.argv) > 1
+        and sys.argv[1].casefold() == 'log'
+    ):
         from .log_cli import main as log_main
         return log_main()
 
-    from .logging_setup import configure_logging
+    instance = SingleInstance()
 
-    logger = configure_logging(reset=True)
-    logger.info('MuteAIMP starting')
-
-    set_windows_app_user_model_id()
-
-    from .ui import ApplicationController
-
-    controller = ApplicationController()
+    if not instance.acquire():
+        # Another muteAIMP instance is already running
+        return 0
 
     try:
+        from .logging_setup import APP_NAME, configure_logging
+
+        logger = configure_logging(reset=True)
+        logger.info(f'{APP_NAME} started')
+
+        set_windows_app_user_model_id()
+
+        from .ui import ApplicationController
+
+        controller = ApplicationController()
+
         return controller.run()
     except Exception:
-        logger.exception('Application terminated unexpectedly')
+        logger.exception(f'{APP_NAME} terminated unexpectedly')
         raise
+    finally:
+        instance.release()
 
 
 if __name__ == "__main__":

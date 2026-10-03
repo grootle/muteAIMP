@@ -41,7 +41,7 @@ try:
 except ImportError:  # pragma: no cover - the app targets Windows
     winreg = None
 
-SVG_PATH = Path(__file__).resolve().parent.parent / 'MuteAIMP.svg'
+SVG_PATH = Path(__file__).resolve().parent / 'assets' / 'MuteAIMP.svg'
 logger = configure_logging()
 
 ORANGE = '#F57C00'
