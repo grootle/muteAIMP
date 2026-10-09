@@ -53,16 +53,16 @@ If automatic resume is disabled, AIMP remains paused.
 
 ### AIMP zero-volume protection
 
-`MuteAIMP` can optionally monitor AIMP's own volume/mute state.
+`MuteAIMP` can optionally monitor AIMP's own volume/mute ane Windows volume/mute state.
 
 You can configure it to pause AIMP when:
 
 * AIMP's volume reaches `0%`
 * AIMP is muted
+* Windows volume reaches `0%`
+* Windows is muted
 
-You can also choose whether AIMP should automatically resume when its volume is restored.
-
-This uses AIMP's player volume/mute state rather than the Windows master volume.
+You can also choose whether AIMP should automatically resume when its volume or Windows volume is restored.
 
 ### Whitelist and blacklist
 
@@ -251,6 +251,8 @@ C:\Users\<User>\AppData\Local\MuteAIMP\settings.json
   "resume_delay_ms": 1000,
   "pause_when_aimp_volume_zero": false,
   "resume_when_aimp_volume_restored": true,
+  "pause_when_win_volume_zero": false,
+  "resume_when_win_volume_restored": true,
   "filter_mode": "all",
   "whitelist": [],
   "blacklist": []
@@ -269,17 +271,15 @@ C:\Users\<User>\AppData\Local\MuteAIMP\settings.json
 | `resume_delay_ms`                  | Delay before automatic resume                |
 | `pause_when_aimp_volume_zero`      | Pause AIMP when its own volume is zero/muted |
 | `resume_when_aimp_volume_restored` | Resume after AIMP volume is restored         |
+| `pause_when_win_volume_zero`       | Pause AIMP when Windows volume is zero/muted |
+| `resume_when_win_volume_restored`  | Resume after Windows volume is restored      |
 | `filter_mode`                      | `all`, `blacklist`, or `whitelist`           |
 | `whitelist`                        | Applications allowed to trigger AIMP         |
 | `blacklist`                        | Applications ignored by the detector         |
 
 ## How pause and resume works
 
-`MuteAIMP` distinguishes between an AIMP pause caused by the application and a pause performed manually by the user.
-
-The application only attempts automatic resume when it owns the current pause state.
-
-This prevents `MuteAIMP` from unexpectedly starting AIMP after the user manually stopped it.
+`MuteAIMP` distinguishes between an AIMP pause caused by the application and a pause performed manually by the user. The application only attempts automatic resume when it owns the current pause state. This prevents `MuteAIMP` from unexpectedly starting AIMP after the user manually stopped it.
 
 A manually stopped AIMP should remain stopped rather than being restarted automatically.
 

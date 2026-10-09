@@ -137,9 +137,23 @@ def get_aimp_snapshot(client):
     return playback, playback_name, volume, muted
 
 
+def get_windows_master_volume_state() -> tuple[float | None, bool | None]:
+    """Return Windows master volume (0.0–1.0) and mute status"""
+    try:
+        endpoint_volume = AudioUtilities.GetSpeakers().EndpointVolume
+
+        volume = float(endpoint_volume.GetMasterVolumeLevelScalar())
+        muted = bool(endpoint_volume.GetMute())
+
+        return volume, muted
+    except Exception:
+        return None, None
+
+
 async def monitor_loop():
     auto_paused_external = False
     auto_paused_volume = False
+    auto_paused_win_volume = False
     resume_deadline = None
     external_seen_count = 0
     external_clear_count = 0
@@ -148,6 +162,7 @@ async def monitor_loop():
     last_external_sources = None
     last_playback = None
     last_volume_zero = None
+    last_win_volume_zero = None
 
     while not stop_event.is_set():
         settings = store.snapshot()
@@ -176,11 +191,9 @@ async def monitor_loop():
         if confirmed_external:
             current_external_trigger = True
             current_external_sources = set(external_sources)
-
         elif confirmed_clear:
             current_external_trigger = False
             current_external_sources = set()
-
         else:
             # The state is still being debounced, so keep the
             # previously logged state unchanged.
@@ -194,7 +207,6 @@ async def monitor_loop():
         except RuntimeError:
             set_state(
                 aimp_state='Unavailable',
-                aimp_volume=None,
                 external_sources=external_sources,
                 external_trigger=external_trigger,
                 status='AIMP is not running'
@@ -210,7 +222,6 @@ async def monitor_loop():
 
         set_state(
             aimp_state=playback_name,
-            aimp_volume=aimp_volume,
             external_sources=external_sources,
             external_trigger=external_trigger
         )
@@ -243,6 +254,22 @@ async def monitor_loop():
                            else 'external sources are active')
                     )
                 )
+            except Exception:
+                pass
+
+        # Rule 3: Windows volume is zero / muted -> PAUSE
+        win_volume, win_muted = get_windows_master_volume_state()
+        win_volume_is_zero = (
+            settings.pause_when_win_volume_zero
+            and win_volume is not None
+            and (win_volume <= 0 or win_muted)
+        )
+
+        if win_volume_is_zero and playback == PlayBackState.Playing:
+            try:
+                client.pause()
+                auto_paused_win_volume = True
+                set_state(status='Paused because Windows volume is zero')
             except Exception:
                 pass
 
@@ -293,13 +320,35 @@ async def monitor_loop():
                 except Exception:
                     pass
 
+        # Resume after Windows volume is restored
+        if auto_paused_win_volume and settings.resume_when_win_volume_restored:
+            win_volume_restored = (
+                win_volume is not None
+                and win_volume > 0
+                and not win_muted
+            )
+            if win_volume_restored and not confirmed_external:
+                try:
+                    client.play()
+                    auto_paused_win_volume = False
+                    set_state(status='AIMP resumed after Windows volume was restored')
+                except Exception:
+                    pass
+
         if confirmed_external:
             set_state(status='External media/audio is active')
-        elif not auto_paused_volume and not auto_paused_external:
-            if settings.pause_when_aimp_volume_zero and aimp_volume == 0:
-                set_state(status='AIMP volume is zero')
-            else:
-                set_state(status='Monitoring is active')
+        elif not auto_paused_external:
+            if auto_paused_volume:
+                if settings.pause_when_aimp_volume_zero and volume_is_zero:
+                    set_state(status='AIMP volume is zero')
+                else:
+                    set_state(status='Monitoring is active')
+
+            if auto_paused_win_volume:
+                if settings.pause_when_win_volume_zero and win_volume_is_zero:
+                    set_state(status='Windows volume is zero')
+                else:
+                    set_state(status='Monitoring is active')
 
         # Logs
         if last_external_trigger is not None:
@@ -340,6 +389,15 @@ async def monitor_loop():
                     logger.info('AIMP volume was restored')
 
             last_volume_zero = volume_is_zero
+
+        if win_volume_is_zero != last_win_volume_zero:
+            if last_win_volume_zero is not None:
+                if win_volume_is_zero:
+                    logger.info('Windows volume became zero or muted')
+                elif settings.resume_when_win_volume_restored:
+                    logger.info('Windows volume was restored')
+
+            last_win_volume_zero = win_volume_is_zero
 
         if playback != last_playback:
             if last_playback is not None:

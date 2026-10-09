@@ -25,6 +25,8 @@ class Settings:
     resume_delay_ms: int = DEFAULT_RESUME_DELAY_MS
     pause_when_aimp_volume_zero: bool = False
     resume_when_aimp_volume_restored: bool = True
+    pause_when_win_volume_zero: bool = False
+    resume_when_win_volume_restored: bool = True
     filter_mode: str = 'all'  # all / blacklist / whitelist
     whitelist: list[str] = field(default_factory=list)
     blacklist: list[str] = field(default_factory=list)
@@ -116,7 +118,6 @@ stop_event = threading.Event()
 state_lock = threading.Lock()
 state = {
     'aimp_state': 'Unknown',
-    'aimp_volume': None,
     'external_sources': [],
     'status': 'Starting...',
     'external_trigger': False,
@@ -134,7 +135,6 @@ def get_state():
     with state_lock:
         return {
             'aimp_state': state['aimp_state'],
-            'aimp_volume': state['aimp_volume'],
             'external_sources': list(state['external_sources']),
             'status': state['status'],
             'external_trigger': state['external_trigger'],

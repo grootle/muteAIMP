@@ -886,6 +886,45 @@ class SettingsDialog(QDialog):
         layout.addWidget(volume)
         layout.addStretch(1)
 
+        # Windows volume-zero settings
+        win_volume = QFrame()
+        win_volume.setObjectName('card')
+
+        vl = QVBoxLayout(win_volume)
+        vl.setContentsMargins(16, 14, 16, 14)
+        vl.setSpacing(8)
+
+        sec2 = QLabel('WINDOWS VOLUME ZERO')
+        sec2.setObjectName('section')
+        vl.addWidget(sec2)
+
+        self.win_zero_check = QCheckBox('Pause AIMP when Windows volume reaches 0% or is muted')
+        self.win_zero_check.setChecked(current.pause_when_win_volume_zero)
+        self.win_zero_check.toggled.connect(self.on_win_zero_check_toggled)
+        vl.addWidget(self.win_zero_check)
+
+        self.win_zero_resume = QCheckBox('Resume AIMP automatically when Windows volume is raised again')
+        self.win_zero_resume.setChecked(current.resume_when_win_volume_restored)
+        self.win_zero_resume.toggled.connect(
+            lambda value: store.update(
+                resume_when_win_volume_restored=bool(value)
+            )
+        )
+        vl.addWidget(self.win_zero_resume)
+
+        self.win_zero_resume_effect = self._opacity_effect(
+            self.win_zero_resume,
+            current.pause_when_win_volume_zero
+        )
+        self._set_faded_enabled(
+            self.win_zero_resume,
+            self.win_zero_resume_effect,
+            current.pause_when_win_volume_zero
+        )
+
+        layout.addWidget(win_volume)
+        layout.addStretch(1)
+
         self.refresh_labels()
         self.update_conditional_controls()
 
@@ -1087,6 +1126,10 @@ class SettingsDialog(QDialog):
         store.update(pause_when_aimp_volume_zero=bool(enabled))
         self.update_conditional_controls()
 
+    def on_win_zero_check_toggled(self, enabled):
+        store.update(pause_when_win_volume_zero=bool(enabled))
+        self.update_conditional_controls()
+
     def update_conditional_controls(self):
         """Enable and dim settings that do not apply to the chosen mode"""
         if hasattr(self, 'threshold_container'):
@@ -1115,6 +1158,15 @@ class SettingsDialog(QDialog):
                 self.zero_resume,
                 self.zero_resume_effect,
                 zero_enabled
+            )
+
+        if hasattr(self, 'win_zero_resume'):
+            win_zero_enabled = (self.win_zero_check.isChecked())
+
+            self._set_faded_enabled(
+                self.win_zero_resume,
+                self.win_zero_resume_effect,
+                win_zero_enabled
             )
 
     def on_threshold(self, value):
